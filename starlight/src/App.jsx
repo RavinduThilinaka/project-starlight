@@ -20,7 +20,7 @@ import OrderDisplayPage from "./components/Order/OrderDisplayPage";
 
 export default function App() {
   return (
-    <Router>
+    <Router basename="/project-starlight">
       <main className="overflow-x-hidden">
        
 
