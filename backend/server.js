@@ -19,7 +19,7 @@ app.use(cookieParser());
 
 app.use(express.json());
 
-const uri = "mongodb+srv://Ravindu:ThilinakaMdb16@cluster0.h6r9a.mongodb.net/starlight?retryWrites=true&w=majority&appName=Cluster0";
+const uri = "mongodb+srv://manoharathilinaka:manohara2001@project.xgtswi1.mongodb.net/starlight?appName=Project";
 
 const connect = async () => {
     try {
