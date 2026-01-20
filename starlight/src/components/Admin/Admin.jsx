@@ -1,29 +1,41 @@
-import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useState, useCallback } from 'react';
+import { motion } from 'framer-motion';
 import { 
   AiOutlineMenu, 
   AiOutlineBell,
   AiOutlineDollar,
   AiOutlinePieChart,
   AiOutlineUser,
-  AiOutlineShoppingCart
+  AiOutlineShoppingCart,
+  AiOutlineArrowUp,
+  AiOutlineArrowDown,
+  AiOutlinePlus
 } from 'react-icons/ai';
-import { FiUserPlus, FiUsers, FiBarChart2 } from 'react-icons/fi';
-import { BsPeopleFill } from 'react-icons/bs';
+import { 
+  FiTrendingUp,
+  FiSettings,
+  FiFilter,
+} from 'react-icons/fi';
+import { BsThreeDotsVertical } from 'react-icons/bs';
+import { HiOutlineUserGroup } from 'react-icons/hi';
 import axios from 'axios';
 import UserTable from './UserTable';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './AdminSidebar';
-import { Bar, Doughnut } from 'react-chartjs-2';
+import UserModal from './UserModal';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import { 
   Chart as ChartJS, 
   ArcElement, 
   BarElement, 
   CategoryScale, 
   LinearScale, 
+  PointElement,
+  LineElement,
   Title, 
   Tooltip, 
-  Legend
+  Legend,
+  Filler
 } from 'chart.js';
 
 // Register ChartJS components
@@ -32,38 +44,65 @@ ChartJS.register(
   BarElement,
   CategoryScale,
   LinearScale,
+  PointElement,
+  LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 const Admin = () => {
   const [users, setUsers] = useState([]);
-  const [selectedUser, setSelectedUser] = useState({});
-  const [isEdit, setIsEdite] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [modalType, setModalType] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [timeRange, setTimeRange] = useState('week');
   const navigate = useNavigate();
 
-  // Initialize chart data with default values
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    age: '',
+    password: '',
+    role: 'user'
+  });
+
   const [analyticsData, setAnalyticsData] = useState({
     userRoles: {
       labels: ['Admin', 'User'],
       datasets: [{
         data: [1, 1],
-        backgroundColor: ['#3B82F6', '#10B981'],
-        borderWidth: 0
+        backgroundColor: ['#8B5CF6', '#10B981', '#F59E0B', '#EF4444'],
+        borderWidth: 0,
+        borderColor: '#fff',
+        hoverOffset: 20
       }]
     },
     ageDistribution: {
       labels: ['<18', '18-24', '25-34', '35-44', '45-54', '55+'],
       datasets: [{
-        label: 'Users by Age Group',
+        label: 'Users by Age',
         data: [0, 0, 0, 0, 0, 0],
-        backgroundColor: '#3B82F6',
-        borderRadius: 6,
+        backgroundColor: 'rgba(139, 92, 246, 0.7)',
+        borderColor: '#8B5CF6',
+        borderWidth: 2,
+        borderRadius: 8,
         borderSkipped: false,
+      }]
+    },
+    userGrowth: {
+      labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      datasets: [{
+        label: 'New Users',
+        data: [12, 19, 8, 15, 22, 18, 25],
+        borderColor: '#8B5CF6',
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.4
       }]
     }
   });
@@ -71,31 +110,20 @@ const Admin = () => {
   const userName = localStorage.getItem('userName');
   const userFirstLetter = localStorage.getItem('userFirstLetter');
 
-  const handleLogout = () => {
-    document.body.classList.add('animate-fadeOut');
-    setTimeout(() => {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('userName');
-      localStorage.removeItem('userEmail');
-      localStorage.removeItem('userAge');
-      localStorage.removeItem('userRole');
-      localStorage.removeItem('userPassword');
-      localStorage.removeItem('userFirstLetter');
-      navigate('/login');
-    }, 500);
-  };
-
   useEffect(() => {
     getUsers();
+    const interval = setInterval(() => {
+      getUsers();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const getUsers = () => {
     setIsLoading(true);
     const token = localStorage.getItem('authToken');
     axios.get("http://localhost:3001/api/getUsers", {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+      headers: { Authorization: `Bearer ${token}` }
     })
     .then(response => {
       const usersData = response.data?.response || [];
@@ -104,263 +132,204 @@ const Admin = () => {
       setIsLoading(false);
     })
     .catch(error => {
-      console.error("Axios error", error);
+      console.error("Error fetching users:", error);
       setIsLoading(false);
     });
   };
 
   const prepareAnalyticsData = (users) => {
-    // Prepare role distribution data
     const rolesCount = users.reduce((acc, user) => {
       acc[user.role] = (acc[user.role] || 0) + 1;
       return acc;
-    }, { admin: 0, user: 0 });
-    
-    // Prepare age distribution data
+    }, { admin: 0, user: 0, manager: 0 });
+
     const ageGroups = users.reduce((acc, user) => {
       const age = user.age || 0;
-      if (age < 18) acc['<18'] = (acc['<18'] || 0) + 1;
-      else if (age >= 18 && age < 25) acc['18-24'] = (acc['18-24'] || 0) + 1;
-      else if (age >= 25 && age < 35) acc['25-34'] = (acc['25-34'] || 0) + 1;
-      else if (age >= 35 && age < 45) acc['35-44'] = (acc['35-44'] || 0) + 1;
-      else if (age >= 45 && age < 55) acc['45-54'] = (acc['45-54'] || 0) + 1;
-      else acc['55+'] = (acc['55+'] || 0) + 1;
+      if (age < 18) acc['<18']++;
+      else if (age < 25) acc['18-24']++;
+      else if (age < 35) acc['25-34']++;
+      else if (age < 45) acc['35-44']++;
+      else if (age < 55) acc['45-54']++;
+      else acc['55+']++;
       return acc;
     }, { '<18': 0, '18-24': 0, '25-34': 0, '35-44': 0, '45-54': 0, '55+': 0 });
 
-    setAnalyticsData({
+    const growthData = Array.from({ length: 7 }, () => 
+      Math.floor(Math.random() * 10) + 5
+    );
+
+    setAnalyticsData(prev => ({
+      ...prev,
       userRoles: {
-        labels: Object.keys(rolesCount),
+        ...prev.userRoles,
+        labels: Object.keys(rolesCount).map(r => r.charAt(0).toUpperCase() + r.slice(1)),
         datasets: [{
-          data: Object.values(rolesCount),
-          backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444'],
-          borderWidth: 0
+          ...prev.userRoles.datasets[0],
+          data: Object.values(rolesCount)
         }]
       },
       ageDistribution: {
-        labels: Object.keys(ageGroups),
+        ...prev.ageDistribution,
         datasets: [{
-          label: 'Users by Age Group',
-          data: Object.values(ageGroups),
-          backgroundColor: '#3B82F6',
-          borderRadius: 6,
-          borderSkipped: false,
+          ...prev.ageDistribution.datasets[0],
+          data: Object.values(ageGroups)
+        }]
+      },
+      userGrowth: {
+        ...prev.userGrowth,
+        datasets: [{
+          ...prev.userGrowth.datasets[0],
+          data: growthData
         }]
       }
+    }));
+  };
+
+  const handleViewUser = (user) => {
+    setSelectedUser(user);
+    setModalType('view');
+  };
+
+  const handleEditUser = (user) => {
+    setSelectedUser(user);
+    setFormData({
+      name: user.name || '',
+      email: user.email || '',
+      age: user.age || '',
+      password: '',
+      role: user.role || 'user'
     });
+    setModalType('edit');
+  };
+
+  const handleAddUser = () => {
+    setSelectedUser(null);
+    setFormData({
+      name: '',
+      email: '',
+      age: '',
+      password: '',
+      role: 'user'
+    });
+    setModalType('add');
+  };
+
+  const handleCloseModal = useCallback(() => {
+    setModalType(null);
+    setSelectedUser(null);
+    setFormData({
+      name: '',
+      email: '',
+      age: '',
+      password: '',
+      role: 'user'
+    });
+  }, []);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSaveUser = (e) => {
+    e.preventDefault();
+    
+    if (modalType === 'add') {
+      axios.post("http://localhost:3001/api/signupUser", formData)
+        .then(response => {
+          alert('User added successfully!');
+          getUsers();
+          handleCloseModal();
+        })
+        .catch(error => {
+          console.error("Error adding user:", error);
+          alert('Error adding user');
+        });
+    } else if (modalType === 'edit' && selectedUser) {
+      const updateData = { ...formData };
+      if (!updateData.password.trim()) {
+        delete updateData.password;
+      }
+      
+      axios.post(`http://localhost:3001/api/updateUser/${selectedUser._id}`, updateData)
+        .then(response => {
+          alert('User updated successfully!');
+          getUsers();
+          handleCloseModal();
+        })
+        .catch(error => {
+          console.error("Error updating user:", error);
+          alert('Error updating user');
+        });
+    }
   };
 
   const deleteUser = (_id) => {
-    axios.delete(`http://localhost:3001/api/deleteUser/${_id}`)
-    .then(() => {
-      getUsers();
-    })
-    .catch(error => {
-      console.error("Axios error", error);
-    });
+    if (window.confirm('Are you sure you want to delete this user?')) {
+      axios.delete(`http://localhost:3001/api/deleteUser/${_id}`)
+      .then(() => {
+        alert('User deleted successfully!');
+        getUsers();
+      })
+      .catch(error => {
+        console.error("Error deleting user:", error);
+        alert('Error deleting user');
+      });
+    }
   };
 
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
+  const handleLogout = () => {
+    document.body.classList.add('animate-fadeOut');
+    setTimeout(() => {
+      localStorage.clear();
+      navigate('/login');
+    }, 500);
   };
 
-  const renderDashboard = () => (
-    <>
-      {/* 4 Card Section */}
-      <AnimatePresence>
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.4 }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 p-6"
-        >
-          {[
-            {
-              title: "Total Users", 
-              value: users.length, 
-              icon: <FiUsers className="w-8 h-8 text-blue-500" />,
-              change: "+12%",
-              bg: "bg-gradient-to-r from-blue-50 to-blue-100"
-            },
-            {
-              title: "Active Today", 
-              value: "142", 
-              icon: <AiOutlineUser className="w-8 h-8 text-green-500" />,
-              change: "+8%",
-              bg: "bg-gradient-to-r from-green-50 to-green-100"
-            },
-            {
-              title: "Total Revenue", 
-              value: "$45,000", 
-              icon: <AiOutlineDollar className="w-8 h-8 text-purple-500" />,
-              change: "+23%",
-              bg: "bg-gradient-to-r from-purple-50 to-purple-100"
-            },
-            {
-              title: "New Orders", 
-              value: "56", 
-              icon: <AiOutlineShoppingCart className="w-8 h-8 text-orange-500" />,
-              change: "+5%",
-              bg: "bg-gradient-to-r from-orange-50 to-orange-100"
-            }
-          ].map((stat, index) => (
-            <motion.div
-              key={stat.title}
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-              whileHover={{ y: -5 }}
-              className={`${stat.bg} p-6 rounded-xl shadow-md border border-gray-100`}
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="text-lg font-medium text-gray-600">{stat.title}</h3>
-                  <p className="text-3xl font-bold mt-2 text-gray-800">{stat.value}</p>
-                  <p className="text-sm mt-2 text-green-600 font-medium">{stat.change}</p>
-                </div>
-                <motion.div 
-                  animate={{ 
-                    scale: [1, 1.1, 1],
-                    rotate: [0, 5, -5, 0]
-                  }}
-                  transition={{ 
-                    duration: 2,
-                    repeat: Infinity,
-                    repeatType: "reverse"
-                  }}
-                  className="p-3 rounded-full bg-white shadow"
-                >
-                  {stat.icon}
-                </motion.div>
-              </div>
-            </motion.div>
-          ))}
-        </motion.div>
-      </AnimatePresence>
-
-      {/* Analytics Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 px-6 mb-6">
-        {/* Role Distribution */}
-        <motion.div 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white p-6 rounded-xl shadow-md border border-gray-100"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">Role Distribution</h3>
-            <div className="flex items-center space-x-2">
-              <AiOutlinePieChart className="text-purple-500" />
-              <span className="text-sm text-gray-500">By percentage</span>
-            </div>
-          </div>
-          <div className="h-64 flex items-center justify-center">
-            <Doughnut 
-              data={analyticsData.userRoles}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: {
-                    position: 'right'
-                  }
-                },
-                cutout: '70%'
-              }}
-            />
-          </div>
-        </motion.div>
-
-        {/* Age Distribution */}
-        <motion.div 
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white p-6 rounded-xl shadow-md border border-gray-100"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">Age Distribution</h3>
-            <div className="flex items-center space-x-2">
-              <BsPeopleFill className="text-green-500" />
-              <span className="text-sm text-gray-500">By age groups</span>
-            </div>
-          </div>
-          <div className="h-64">
-            <Bar 
-              data={analyticsData.ageDistribution}
-              options={{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                  legend: {
-                    display: false
-                  }
-                },
-                scales: {
-                  y: {
-                    beginAtZero: true,
-                    grid: {
-                      drawBorder: false
-                    }
-                  },
-                  x: {
-                    grid: {
-                      display: false
-                    }
-                  }
-                }
-              }}
-            />
-          </div>
-        </motion.div>
-      </div>
-
-      {/* User Table Section */}
-      <motion.section
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.6 }}
-        className="bg-white rounded-xl shadow-md p-6 border border-gray-100 mx-6 mb-6"
-      >
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-semibold text-gray-800">User Management</h3>
-          <motion.button
-            whileHover={{ scale: 1.03, backgroundColor: "#3b82f6" }}
-            whileTap={{ scale: 0.97 }}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow"
-          >
-            <FiUserPlus className="w-5 h-5" />
-            Add User
-          </motion.button>
-        </div>
-        
-        {isLoading ? (
-          <motion.div 
-            animate={{ rotate: 360 }}
-            transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-            className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full mx-auto my-10"
-          />
-        ) : (
-          <UserTable
-            rows={users}
-            selectedUser={data => {
-              setSelectedUser(data);
-              setIsEdite(true);
-            }}
-            deleteUser={data => window.confirm('Are you sure?') && deleteUser(data)}
-          />
-        )}
-      </motion.section>
-    </>
-  );
+  const statsCards = [
+    {
+      title: "Total Users",
+      value: users.length,
+      change: "+12.5%",
+      trend: "up",
+      icon: <HiOutlineUserGroup className="w-8 h-8" />,
+      color: "from-blue-500 to-cyan-500",
+      bg: "bg-gradient-to-br from-blue-50 to-cyan-50"
+    },
+    {
+      title: "Active Sessions",
+      value: "142",
+      change: "+8.2%",
+      trend: "up",
+      icon: <AiOutlineUser className="w-8 h-8" />,
+      color: "from-emerald-500 to-green-500",
+      bg: "bg-gradient-to-br from-emerald-50 to-green-50"
+    },
+    {
+      title: "Monthly Revenue",
+      value: "$45,231",
+      change: "+23.1%",
+      trend: "up",
+      icon: <AiOutlineDollar className="w-8 h-8" />,
+      color: "from-purple-500 to-pink-500",
+      bg: "bg-gradient-to-br from-purple-50 to-pink-50"
+    },
+    {
+      title: "Conversion Rate",
+      value: "4.8%",
+      change: "-1.2%",
+      trend: "down",
+      icon: <FiTrendingUp className="w-8 h-8" />,
+      color: "from-amber-500 to-orange-500",
+      bg: "bg-gradient-to-br from-amber-50 to-orange-50"
+    }
+  ];
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100"
-    >
+    <div className="flex min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       <Sidebar 
         isSidebarOpen={isSidebarOpen} 
         handleLogout={handleLogout}
@@ -368,57 +337,221 @@ const Admin = () => {
         setActiveTab={setActiveTab}
       />
 
-      <div className={`flex-1 transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-0'}`}>
-        <motion.header 
-          initial={{ y: -20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="flex justify-between items-center mb-8 bg-white p-4 shadow-sm sticky top-0 z-10"
-        >
-          <div className="flex items-center space-x-4">
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              onClick={toggleSidebar}
-              className="p-2 rounded-lg hover:bg-gray-100"
-            >
-              <AiOutlineMenu className="w-6 h-6 text-gray-600" />
-            </motion.button>
-            
-            <motion.div 
-              whileHover={{ rotate: 360 }}
-              transition={{ duration: 0.8 }}
-              className="bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xl font-bold w-10 h-10 rounded-full flex items-center justify-center shadow-lg"
-            >
-              {userFirstLetter}
-            </motion.div>
-            <h2 className="text-3xl font-semibold text-gray-800">
-              Welcome, <span className="text-blue-600">{userName}</span>
-            </h2>
-          </div>
-          <div className="flex items-center space-x-4">
-            <motion.div 
-              whileHover={{ scale: 1.1 }}
-              className="relative p-2 rounded-full hover:bg-gray-100 cursor-pointer"
-            >
-              <AiOutlineBell className="w-6 h-6 text-gray-600" />
-              <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500"></span>
-            </motion.div>
-          </div>
-        </motion.header>
+      <div className={`flex-1 transition-all duration-500 ease-out ${isSidebarOpen ? 'ml-80' : 'ml-0'}`}>
+        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-lg border-b border-gray-200/50 px-8 py-4 shadow-sm">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center space-x-6">
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                className="p-3 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 shadow-md transition-all"
+              >
+                <AiOutlineMenu className="w-6 h-6 text-gray-700" />
+              </button>
+              
+              <div className="flex items-center space-x-4">
+                <div className="relative">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+                    <span className="text-white font-bold text-xl">{userFirstLetter}</span>
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-2 border-white"></div>
+                </div>
+                
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800">
+                    Welcome back, <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">{userName}</span>
+                  </h2>
+                  <p className="text-gray-500 text-sm">Admin Dashboard</p>
+                </div>
+              </div>
+            </div>
 
-        {activeTab === 'dashboard' ? renderDashboard() : null}
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <button className="p-3 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-200 hover:from-gray-200 hover:to-gray-300 shadow-md">
+                  <AiOutlineBell className="w-6 h-6 text-gray-700" />
+                </button>
+                <span className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-r from-rose-500 to-pink-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-lg">
+                  3
+                </span>
+              </div>
+              
+              <button className="flex items-center space-x-3 px-6 py-3 rounded-2xl bg-gradient-to-r from-gray-900 to-gray-800 text-white shadow-lg hover:shadow-xl transition-all">
+                <FiSettings className="w-5 h-5" />
+                <span className="font-medium">Settings</span>
+              </button>
+            </div>
+          </div>
+        </header>
 
-        <motion.footer 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
-          className="mt-8 text-center text-gray-500 text-sm pb-6"
-        >
-          © {new Date().getFullYear()} Admin Panel. All rights reserved.
-        </motion.footer>
+        <main className="p-8">
+          {activeTab === 'dashboard' && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                {statsCards.map((stat, index) => (
+                  <div
+                    key={stat.title}
+                    className={`${stat.bg} p-6 rounded-2xl border border-gray-200/50 shadow-lg hover:shadow-2xl transition-all duration-300`}
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <p className="text-gray-600 text-sm font-medium mb-1">{stat.title}</p>
+                        <p className="text-3xl font-bold text-gray-800">{stat.value}</p>
+                      </div>
+                      <div className={`p-3 rounded-xl bg-gradient-to-br ${stat.color}`}>
+                        {stat.icon}
+                      </div>
+                    </div>
+                    <div className="flex items-center">
+                      {stat.trend === 'up' ? (
+                        <AiOutlineArrowUp className="text-emerald-500 mr-1" />
+                      ) : (
+                        <AiOutlineArrowDown className="text-rose-500 mr-1" />
+                      )}
+                      <span className={`text-sm font-medium ${stat.trend === 'up' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {stat.change} from last month
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <div className="lg:col-span-2 bg-white p-6 rounded-2xl border border-gray-200/50 shadow-lg">
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-800">User Growth</h3>
+                      <p className="text-gray-500 text-sm">Last 7 days performance</p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        className={`px-4 py-2 rounded-lg text-sm font-medium ${timeRange === 'week' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-600 hover:bg-gray-100'}`}
+                        onClick={() => setTimeRange('week')}
+                      >
+                        Week
+                      </button>
+                      <button
+                        className={`px-4 py-2 rounded-lg text-sm font-medium ${timeRange === 'month' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-600 hover:bg-gray-100'}`}
+                        onClick={() => setTimeRange('month')}
+                      >
+                        Month
+                      </button>
+                    </div>
+                  </div>
+                  <div className="h-64">
+                    <Line 
+                      data={analyticsData.userGrowth}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: {
+                            display: false
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl border border-gray-200/50 shadow-lg">
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-800">Role Distribution</h3>
+                      <p className="text-gray-500 text-sm">User roles overview</p>
+                    </div>
+                    <BsThreeDotsVertical className="text-gray-400" />
+                  </div>
+                  <div className="h-64">
+                    <Doughnut 
+                      data={analyticsData.userRoles}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '70%'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-2xl border border-gray-200/50 shadow-lg mb-8">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-800">Age Distribution</h3>
+                    <p className="text-gray-500 text-sm">Users by age groups</p>
+                  </div>
+                  <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-50 text-indigo-600 text-sm font-medium">
+                    <FiFilter />
+                    Filter
+                  </button>
+                </div>
+                <div className="h-64">
+                  <Bar 
+                    data={analyticsData.ageDistribution}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-200/50 shadow-xl overflow-hidden">
+                <div className="p-8 border-b border-gray-200/50">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-2xl font-bold text-gray-800">User Management</h3>
+                      <p className="text-gray-500">Manage all user accounts and permissions</p>
+                    </div>
+                    <button
+                      onClick={handleAddUser}
+                      className="flex items-center gap-3 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold shadow-lg hover:shadow-xl"
+                    >
+                      <AiOutlinePlus className="w-5 h-5" />
+                      <span>Add New User</span>
+                    </button>
+                  </div>
+                </div>
+                
+                {isLoading ? (
+                  <div className="py-20 flex items-center justify-center">
+                    <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                ) : (
+                  <UserTable
+                    rows={users}
+                    viewUser={handleViewUser}
+                    editUser={handleEditUser}
+                    deleteUser={deleteUser}
+                  />
+                )}
+              </div>
+            </>
+          )}
+        </main>
+
+        <footer className="px-8 py-6 text-center text-gray-500 text-sm border-t border-gray-200/50">
+          <div className="flex flex-col sm:flex-row justify-between items-center">
+            <p>© {new Date().getFullYear()} Admin Panel v2.0. All rights reserved.</p>
+            <div className="flex items-center gap-6 mt-4 sm:mt-0">
+              <span className="text-indigo-600 font-medium">Premium Support</span>
+              <span className="text-gray-400">•</span>
+              <span>Last updated: Just now</span>
+            </div>
+          </div>
+        </footer>
       </div>
-    </motion.div>
+
+      {/* Import and use the separate UserModal component */}
+      <UserModal
+        modalType={modalType}
+        selectedUser={selectedUser}
+        formData={formData}
+        handleCloseModal={handleCloseModal}
+        handleInputChange={handleInputChange}
+        handleSaveUser={handleSaveUser}
+      />
+    </div>
   );
 };
 

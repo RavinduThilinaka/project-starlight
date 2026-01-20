@@ -1,10 +1,10 @@
-import { FaEye, FaEdit, FaTrash, FaSearch, FaUserPlus } from "react-icons/fa";
+import { FaEye, FaEdit, FaTrash, FaSearch, FaSortUp, FaSortDown } from "react-icons/fa";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-export default function UserTable({ rows = [], selectedUser, deleteUser }) {
+export default function UserTable({ rows = [], viewUser, editUser, deleteUser }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'ascending' });
+  const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
 
   const filteredRows = rows.filter(row =>
     Object.values(row).some(
@@ -12,229 +12,235 @@ export default function UserTable({ rows = [], selectedUser, deleteUser }) {
     )
   );
 
-  // Sorting function
   const sortedRows = [...filteredRows].sort((a, b) => {
     if (!sortConfig.key) return 0;
-    if (a[sortConfig.key] < b[sortConfig.key]) {
-      return sortConfig.direction === 'ascending' ? -1 : 1;
+    const aValue = a[sortConfig.key] || '';
+    const bValue = b[sortConfig.key] || '';
+    
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return sortConfig.direction === 'asc' 
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue);
     }
-    if (a[sortConfig.key] > b[sortConfig.key]) {
-      return sortConfig.direction === 'ascending' ? 1 : -1;
-    }
-    return 0;
+    
+    return sortConfig.direction === 'asc' 
+      ? (aValue < bValue ? -1 : 1)
+      : (bValue < aValue ? -1 : 1);
   });
 
   const requestSort = (key) => {
-    let direction = 'ascending';
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
   };
 
-  const getSortIndicator = (key) => {
+  const getSortIcon = (key) => {
     if (sortConfig.key !== key) return null;
-    return sortConfig.direction === 'ascending' ? '↑' : '↓';
+    return sortConfig.direction === 'asc' 
+      ? <FaSortUp className="inline ml-1" />
+      : <FaSortDown className="inline ml-1" />;
+  };
+
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+    }
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="overflow-x-auto p-6"
-    >
-      <div className="bg-white shadow-xl rounded-xl overflow-hidden border border-gray-100">
-        {/* Table Header with Search */}
-        <div className="p-4 bg-gradient-to-r from-blue-500 to-blue-600">
-          <div className="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
-            <motion.h2 
-              whileHover={{ scale: 1.02 }}
-              className="text-2xl font-bold text-white"
-            >
-              User Management
-            </motion.h2>
-            
-            <div className="relative w-full md:w-64">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <FaSearch className="text-gray-300" />
-              </div>
-              <motion.input
-                whileFocus={{ scale: 1.02 }}
-                type="text"
-                placeholder="Search users..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2 rounded-lg bg-blue-400 bg-opacity-20 text-white placeholder-gray-200 focus:outline-none focus:ring-2 focus:ring-white focus:bg-opacity-30 transition-all"
-              />
+    <div className="w-full">
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="px-8 py-6 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500">
+          <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
+            <div>
+              <h2 className="text-3xl font-bold text-white mb-2">
+                User Management
+              </h2>
+              <p className="text-indigo-100">Manage your organization's user accounts</p>
             </div>
-
-            <motion.button
-              whileHover={{ scale: 1.05, boxShadow: "0 5px 15px rgba(59, 130, 246, 0.4)" }}
-              whileTap={{ scale: 0.98 }}
-              className="flex items-center gap-2 bg-white text-blue-600 px-4 py-2 rounded-lg font-medium shadow-md"
-            >
-              <FaUserPlus />
-              Add User
-            </motion.button>
+            
+            <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+              <div className="relative flex-1 lg:w-80">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <FaSearch className="text-purple-300" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search users by name, email, role..."
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  onKeyDown={handleKeyDown}
+                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20 text-white placeholder-purple-100 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent transition-all"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Table */}
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="w-full">
+            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
               <tr>
-                {['name', 'email', 'age', 'role'].map((header) => (
+                {[
+                  { key: 'name', label: 'Name' },
+                  { key: 'email', label: 'Email Address' },
+                  { key: 'age', label: 'Age' },
+                  { key: 'role', label: 'Role' }
+                ].map(({ key, label }) => (
                   <th 
-                    key={header}
-                    onClick={() => requestSort(header)}
-                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 transition-colors"
+                    key={key}
+                    onClick={() => requestSort(key)}
+                    className="px-8 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer"
                   >
                     <div className="flex items-center">
-                      {header.charAt(0).toUpperCase() + header.slice(1)}
-                      <span className="ml-1 text-blue-500">
-                        {getSortIndicator(header)}
+                      <span className="text-gray-600">
+                        {label}
+                      </span>
+                      <span className="ml-2 text-indigo-500">
+                        {getSortIcon(key)}
                       </span>
                     </div>
                   </th>
                 ))}
-                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-8 py-4 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-100">
               <AnimatePresence>
-                {sortedRows && sortedRows.length > 0 ? (
+                {sortedRows.length > 0 ? (
                   sortedRows.map((row, index) => (
-                    <motion.tr
+                    <tr
                       key={row.id || row.email}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      whileHover={{ backgroundColor: 'rgba(59, 130, 246, 0.05)' }}
-                      className="hover:bg-blue-50 transition-colors"
+                      className="hover:bg-gray-50 transition-colors"
                     >
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-8 py-6">
                         <div className="flex items-center">
-                          <div className="flex-shrink-0 h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">
+                          <div className="flex-shrink-0 h-12 w-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-lg">
                             {row.name?.charAt(0).toUpperCase() || 'U'}
                           </div>
                           <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{row.name}</div>
+                            <div className="text-sm font-semibold text-gray-900">{row.name}</div>
+                            <div className="text-xs text-gray-500">ID: {row._id?.substring(0, 8)}...</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {row.email}
+                      <td className="px-8 py-6">
+                        <div className="text-sm text-gray-900 font-medium">{row.email}</div>
+                        <div className="text-xs text-gray-500">Active</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                          {row.age}
+                      <td className="px-8 py-6">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gradient-to-r from-green-100 to-emerald-100 text-emerald-800">
+                          <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>
+                          {row.age} years
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      <td className="px-8 py-6">
+                        <span className={`px-4 py-2 rounded-lg text-xs font-bold ${
                           row.role === 'admin' 
-                            ? 'bg-purple-100 text-purple-800' 
-                            : 'bg-yellow-100 text-yellow-800'
+                            ? 'bg-gradient-to-r from-purple-100 to-pink-100 text-purple-800' 
+                            : row.role === 'manager'
+                            ? 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-800'
+                            : 'bg-gradient-to-r from-yellow-100 to-orange-100 text-yellow-800'
                         }`}>
                           {row.role}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
-                        <div className="flex justify-center space-x-2">
-                          <motion.button
-                            whileHover={{ scale: 1.1, backgroundColor: '#3B82F6' }}
-                            whileTap={{ scale: 0.9 }}
-                            className="p-2 rounded-lg bg-blue-100 text-blue-600 hover:text-white transition-all"
-                            onClick={() => selectedUser(row)}
-                            title="View"
+                      <td className="px-8 py-6">
+                        <div className="flex items-center space-x-3">
+                          <button
+                            onClick={() => viewUser(row)}
+                            className="p-3 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 text-blue-600 hover:from-blue-100 hover:to-blue-200 shadow-md hover:shadow-lg transition-all duration-200"
+                            title="View User"
                           >
                             <FaEye className="w-4 h-4" />
-                          </motion.button>
-                          <motion.button
-                            whileHover={{ scale: 1.1, backgroundColor: '#F59E0B' }}
-                            whileTap={{ scale: 0.9 }}
-                            className="p-2 rounded-lg bg-yellow-100 text-yellow-600 hover:text-white transition-all"
-                            onClick={() => selectedUser(row)}
-                            title="Edit"
+                          </button>
+
+                          <button
+                            onClick={() => editUser(row)}
+                            className="p-3 rounded-xl bg-gradient-to-br from-amber-50 to-amber-100 text-amber-600 hover:from-amber-100 hover:to-amber-200 shadow-md hover:shadow-lg transition-all duration-200"
+                            title="Edit User"
                           >
                             <FaEdit className="w-4 h-4" />
-                          </motion.button>
-                          <motion.button
-                            whileHover={{ scale: 1.1, backgroundColor: '#EF4444' }}
-                            whileTap={{ scale: 0.9 }}
-                            className="p-2 rounded-lg bg-red-100 text-red-600 hover:text-white transition-all"
+                          </button>
+
+                          <button
                             onClick={() => deleteUser(row._id)}
-                            title="Delete"
+                            className="p-3 rounded-xl bg-gradient-to-br from-rose-50 to-rose-100 text-rose-600 hover:from-rose-100 hover:to-rose-200 shadow-md hover:shadow-lg transition-all duration-200"
+                            title="Delete User"
                           >
                             <FaTrash className="w-4 h-4" />
-                          </motion.button>
+                          </button>
                         </div>
                       </td>
-                    </motion.tr>
+                    </tr>
                   ))
                 ) : (
-                  <motion.tr
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                  >
-                    <td colSpan="5" className="px-6 py-12 text-center">
-                      <div className="flex flex-col items-center justify-center">
-                        <div className="w-16 h-16 mb-4 rounded-full bg-gray-100 flex items-center justify-center">
-                          <FaSearch className="text-gray-400 text-xl" />
+                  <tr>
+                    <td colSpan="5" className="px-8 py-20">
+                      <div className="flex flex-col items-center justify-center text-center">
+                        <div className="w-24 h-24 mb-6 rounded-3xl bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center shadow-inner">
+                          <FaSearch className="text-gray-400 text-3xl" />
                         </div>
-                        <p className="text-gray-500 text-lg font-medium">No users found</p>
-                        <p className="text-gray-400 mt-1">
-                          {searchQuery ? 'Try a different search term' : 'Add a new user to get started'}
+                        <h3 className="text-2xl font-bold text-gray-700 mb-2">No users found</h3>
+                        <p className="text-gray-500 max-w-md">
+                          {searchQuery 
+                            ? `No results found for "${searchQuery}". Try a different search term.`
+                            : 'No users in the database. Add your first user to get started!'
+                          }
                         </p>
                       </div>
                     </td>
-                  </motion.tr>
+                  </tr>
                 )}
               </AnimatePresence>
             </tbody>
           </table>
         </div>
 
-        {/* Pagination */}
         {sortedRows.length > 0 && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3 }}
-            className="px-6 py-3 flex items-center justify-between border-t border-gray-200"
-          >
-            <div className="text-sm text-gray-500">
-              Showing <span className="font-medium">1</span> to <span className="font-medium">10</span> of{' '}
-              <span className="font-medium">{sortedRows.length}</span> results
+          <div className="px-8 py-5 bg-gradient-to-r from-gray-50 to-gray-100 border-t border-gray-200">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+              <div className="text-sm text-gray-600">
+                Showing <span className="font-bold text-gray-800">{sortedRows.length}</span> of{' '}
+                <span className="font-bold text-gray-800">{rows.length}</span> users
+              </div>
+              <div className="flex items-center space-x-3">
+                <button className="px-4 py-2 rounded-lg bg-white text-gray-700 font-medium border border-gray-300 hover:bg-gray-50 shadow-sm transition-all">
+                  ← Previous
+                </button>
+                <div className="flex items-center space-x-1">
+                  {[1, 2, 3].map(num => (
+                    <button
+                      key={num}
+                      className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                        num === 1 
+                          ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg'
+                          : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300'
+                      }`}
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  <span className="px-2 text-gray-500">...</span>
+                  <button className="px-4 py-2 rounded-lg bg-white text-gray-700 hover:bg-gray-50 border border-gray-300">
+                    10
+                  </button>
+                </div>
+                <button className="px-4 py-2 rounded-lg bg-white text-gray-700 font-medium border border-gray-300 hover:bg-gray-50 shadow-sm transition-all">
+                  Next →
+                </button>
+              </div>
             </div>
-            <div className="flex space-x-2">
-              <motion.button
-                whileHover={{ backgroundColor: '#E5E7EB' }}
-                className="px-3 py-1 rounded-md bg-gray-100 text-gray-700 text-sm font-medium"
-              >
-                Previous
-              </motion.button>
-              <motion.button
-                whileHover={{ backgroundColor: '#3B82F6', color: '#FFF' }}
-                className="px-3 py-1 rounded-md bg-blue-100 text-blue-600 text-sm font-medium"
-              >
-                1
-              </motion.button>
-              <motion.button
-                whileHover={{ backgroundColor: '#E5E7EB' }}
-                className="px-3 py-1 rounded-md bg-gray-100 text-gray-700 text-sm font-medium"
-              >
-                Next
-              </motion.button>
-            </div>
-          </motion.div>
+          </div>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
